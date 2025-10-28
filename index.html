@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ngobrol Santai AI</title>
+    <!-- Memuat Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Memuat Google Font (Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Mengatur font default ke Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Animasi kustom untuk loader "mengetik" */
+        @keyframes bounce-delay {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+        .bounce-dot {
+            animation: bounce-delay 1.4s infinite ease-in-out both;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <!-- Kotak Room Chat Utama -->
+        <div class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col h-[90vh] md:h-[80vh] overflow-hidden">
+            
+            <!-- Header Chat -->
+            <header class="p-5 border-b bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-t-2xl shadow-md">
+                <h1 class="text-2xl font-bold text-center">Ngobrol Santai AI</h1>
+                <p class="text-sm text-center text-indigo-100">Ditenagai oleh Gemini AI</p>
+            </header>
+            
+            <!-- Area Chat History (Tempat Bubble Muncul) -->
+            <main id="chat-history" class="flex-1 p-6 overflow-y-auto space-y-4 bg-gray-50">
+                <!-- Pesan selamat datang dari AI -->
+                <div class="flex justify-start">
+                    <div class="bg-gray-200 text-gray-800 p-3 rounded-r-lg rounded-bl-lg max-w-xs md:max-w-md shadow-sm">
+                        Halo! 👋 Ada yang bisa saya bantu hari ini?
+                    </div>
+                </div>
+            </main>
+            
+            <!-- Kolom Input Pesan -->
+            <footer class="p-4 border-t bg-white rounded-b-2xl">
+                <form id="chat-form" class="flex items-center space-x-3">
+                    <input 
+                        id="message-input"
+                        type="text"
+                        placeholder="Ketik pesanmu di sini..."
+                        class="flex-1 px-5 py-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition duration-200"
+                        autocomplete="off"
+                    >
+                    <button 
+                        type="submit"
+                        class="bg-indigo-600 text-white rounded-full p-3 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-200 shadow-lg hover:shadow-none"
+                        aria-label="Kirim Pesan"
+                    >
+                        <!-- Ikon Kirim (Paper Plane) SVG -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                    </button>
+                </form>
+            </footer>
+        </div>
+    </div>
+
+    <script>
+        // --- PERHATIAN PENTING ---
+        // MENYIMPAN API KEY LANGSUNG DI KODE JAVASCRIPT (CLIENT-SIDE) SANGAT TIDAK AMAN.
+        // API Key Anda dapat dilihat oleh siapa saja yang membuka website ini.
+        // Untuk produksi, gunakan server (backend) untuk menyimpan dan memanggil API Key ini.
+        // Ini hanya untuk tujuan demonstrasi.
+        const API_KEY = "AIzaSyBrplXhUMP2okJZL55sNIEOqCgFIISZbEo";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
+
+        // Mendapatkan elemen DOM
+        const chatHistory = document.getElementById('chat-history');
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+
+        // Menyimpan riwayat obrolan untuk konteks Gemini
+        let conversationHistory = [
+            // Mulai dengan pesan sistem (AI) pertama sebagai konteks awal
+            {
+                role: 'model',
+                parts: [{ text: "Halo! 👋 Ada yang bisa saya bantu hari ini?" }]
+            }
+        ];
+
+        // Fungsi untuk menambahkan pesan ke UI
+        function appendMessage(message, role, isLoading = false) {
+            const messageContainer = document.createElement('div');
+            // Mengatur bubble ke kanan (user) atau kiri (model)
+            messageContainer.className = `flex ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = `p-3 rounded-lg max-w-xs md:max-w-md shadow-sm ${role === 'user'
+                ? 'bg-indigo-500 text-white rounded-l-lg rounded-br-lg'
+                : 'bg-gray-200 text-gray-800 rounded-r-lg rounded-bl-lg'
+            }`;
+
+            if (isLoading) {
+                // Tampilkan loader "mengetik"
+                bubble.id = 'loading-bubble';
+                bubble.classList.add('animate-pulse');
+                bubble.innerHTML = `
+                    <div class="flex items-center space-x-1.5">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full bounce-dot" style="animation-delay: -0.3s;"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full bounce-dot" style="animation-delay: -0.15s;"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full bounce-dot"></div>
+                    </div>`;
+            } else {
+                // Tampilkan pesan teks, ubah newline (\n) menjadi <br>
+                bubble.innerHTML = message.replace(/\n/g, '<br>');
+            }
+
+            messageContainer.appendChild(bubble);
+            chatHistory.appendChild(messageContainer);
+            
+            // Auto-scroll ke pesan terbaru
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // Event listener saat form (pesan) dikirim
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault(); // Mencegah form refresh halaman
+            
+            const userMessage = messageInput.value.trim();
+            if (!userMessage) return; // Jangan kirim pesan kosong
+
+            // 1. Tampilkan pesan user di UI
+            appendMessage(userMessage, 'user');
+
+            // 2. Tambahkan pesan user ke riwayat untuk API
+            conversationHistory.push({
+                role: 'user',
+                parts: [{ text: userMessage }]
+            });
+
+            // 3. Bersihkan input field
+            messageInput.value = '';
+
+            // 4. Tampilkan loader "mengetik" dari AI
+            appendMessage('', 'model', true);
+
+            try {
+                // 5. Kirim permintaan ke Gemini API
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contents: conversationHistory,
+                        // Pengaturan keamanan untuk obrolan santai
+                        safetySettings: [
+                            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+                        ]
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // 6. Hapus loader
+                const loadingBubble = document.getElementById('loading-bubble');
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    const modelMessage = result.candidates[0].content.parts[0].text;
+
+                    // 7. Tampilkan balasan AI (menggantikan loader)
+                    if (loadingBubble) {
+                        loadingBubble.innerHTML = modelMessage.replace(/\n/g, '<br>');
+                        loadingBubble.classList.remove('animate-pulse');
+                        loadingBubble.removeAttribute('id');
+                    }
+                    
+                    // 8. Tambahkan balasan AI ke riwayat untuk API
+                    conversationHistory.push({
+                        role: 'model',
+                        parts: [{ text: modelMessage }]
+                    });
+
+                } else {
+                    // Handle jika tidak ada balasan (misal, diblokir safety)
+                    const errorMessage = result.promptFeedback?.blockReason || 'Maaf, saya tidak bisa merespons itu.';
+                    if (loadingBubble) {
+                        loadingBubble.innerHTML = `Error: ${errorMessage}`;
+                        loadingBubble.classList.remove('animate-pulse');
+                        loadingBubble.classList.add('bg-red-100', 'text-red-700');
+                        loadingBubble.removeAttribute('id');
+                    }
+                    // Hapus pesan user terakhir dari riwayat agar tidak error di call berikutnya
+                    conversationHistory.pop();
+                }
+
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                // Handle error jaringan atau API
+                const loadingBubble = document.getElementById('loading-bubble');
+                if (loadingBubble) {
+                    loadingBubble.innerHTML = 'Waduh, koneksi sepertinya bermasalah. Coba lagi ya.';
+                    loadingBubble.classList.remove('animate-pulse');
+                    loadingBubble.classList.add('bg-red-100', 'text-red-700');
+                    loadingBubble.removeAttribute('id');
+                }
+                // Hapus pesan user terakhir dari riwayat
+                conversationHistory.pop();
+            }
+
+            // Selalu scroll ke bawah setelah ada balasan atau error
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        });
+    </script>
+</body>
+</html>
